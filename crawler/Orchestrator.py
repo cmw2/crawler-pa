@@ -128,7 +128,9 @@ class Orchestrator:
                 links = crawler.get_links(body[0], exclude=self.EXCLUDE, file_types=self.EXTRACT_LINK_TYPE)
         
             for link in links:
-                if any(link.startswith(base_url) for base_url in self.BASE_URLS) and "#" not in link:
+                # Check if the link is a child of the base url
+                if any(link.startswith(base_url) for base_url in self.BASE_URLS):
+                    link = link.split('#')[0]  # Trim off anything after #
                     self.logging.info(f"Link found, adding to crawler queue: {link}")
                     item = {"url": link, "metadata": {}, "type": "crawl"}
                     nextq.put(item)
