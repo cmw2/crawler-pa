@@ -128,9 +128,10 @@ class Orchestrator:
                 links = crawler.get_links(body[0], exclude=self.EXCLUDE, file_types=self.EXTRACT_LINK_TYPE)
         
             for link in links:
-                self.logging.info(f"Link found, adding to crawler queue: {link}")
-                item = {"url": link, "metadata": {}, "type": "crawl"}
-                nextq.put(item)
+                if any(link.startswith(base_url) for base_url in self.BASE_URLS.split(',')) and "#" not in link:
+                    self.logging.info(f"Link found, adding to crawler queue: {link}")
+                    item = {"url": link, "metadata": {}, "type": "crawl"}
+                    nextq.put(item)
         except Exception as e:
             self.logging.error(f"Error in link extraction, Error: {e}")
 
