@@ -172,8 +172,9 @@ class WebCrawler:
         return response
 
     def parse_page(self):
-        main_content = self.driver.find_element(By.TAG_NAME, "body")
-        return main_content.text
+        main_content = self.driver.title + "\n"
+        main_content += self.driver.find_element(By.TAG_NAME, "body").text
+        return main_content
 
     def close(self):
         self.driver.quit()
