@@ -17,7 +17,7 @@ app = func.FunctionApp()
 
 schedule = os.getenv('SCHEDULE', '0 0 * * *')
 
-@app.schedule(schedule=schedule, arg_name="myTimer", run_on_startup=False, use_monitor=True) 
+@app.schedule(schedule=schedule, arg_name="myTimer", run_on_startup=True, use_monitor=True) 
 def webcrawler(myTimer: func.TimerRequest) -> None:
     
     cosmos_logger = os.environ.get("Use_COSMOS_Logger", "true")
