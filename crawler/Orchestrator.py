@@ -49,6 +49,7 @@ class Orchestrator:
 
             self.index_client, self.search_client, self.form_recognizer_client, self.cosmosdb_client, self.database, self.container = self.setup_clients()
             self.crawler_store_items = self.setup_crawler_data()
+            self.processed_urls = {}
 
         self.logging.info(f"NUM_OF_THREADS: {self.NUM_OF_THREADS}")
         self.logging.info(f"EXCLUDE_LIST: {self.EXCLUDE_LIST}")
@@ -117,7 +118,7 @@ class Orchestrator:
 
 
 
-    def extract_links_to_queue(self, crawler, nextq):
+    def extract_links_to_queue(self, crawler, url_type, nextq):
         self.logging.info(f"Extracting Links...")
 
         body = crawler.get_elements(By.TAG_NAME, "body")
@@ -130,10 +131,13 @@ class Orchestrator:
             for link in links:
                 # Check if the link is a child of the base url
                 if any(link.startswith(base_url) for base_url in self.BASE_URLS):
+                    # TODO: Do we also need to trim off query string?
                     link = link.split('#')[0]  # Trim off anything after #
-                    self.logging.info(f"Link found, adding to crawler queue: {link}")
-                    item = {"url": link, "metadata": {}, "type": "crawl"}
-                    nextq.put(item)
+                    if link not in self.processed_urls:
+                        self.processed_urls[link] = True
+                        self.logging.info(f"Link found, adding to crawler queue: {link}")
+                        item = {"url": link, "metadata": {}, "type": url_type}
+                        nextq.put(item)
         except Exception as e:
             self.logging.error(f"Error in link extraction, Error: {e}")
 
@@ -188,7 +192,7 @@ class Orchestrator:
                         return None
 
                     if url_type == "base":
-                        self.extract_links_to_queue(crawler=crawler, nextq=q)
+                        self.extract_links_to_queue(crawler=crawler, url_type=url_type, nextq=q)
 
                     content = crawler.parse_page()
                     return content, "text"
@@ -431,6 +435,11 @@ class Orchestrator:
         # Wait for all the threads to finish
         for thread in all_threads:
             thread.join()
+
+        # # Log the processed URLs
+        # for item in self.crawler_store_items:
+        #     url = item['url']
+        #     self.logging.info(f"Processed URL: {url}")
 
         # Check for removed links
         expired_links = self.check_expired_links(self.crawler_store_items)
