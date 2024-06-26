@@ -29,6 +29,8 @@ class Orchestrator:
             include_domains = os.getenv('INCLUDE_DOMAINS', "").split(',')
             self.INCLUDE_DOMAINS = False if include_domains == [''] else [include_domain.lower() for include_domain in include_domains]
             self.BASE_URLS = os.getenv('BASE_URLS', "").lower().split(',')
+            self.INCLUDE_PATHS = os.getenv('INCLUDE_PATHS', "").lower().split(',')
+            self.ALLOWED_BASE_PATHS = self.BASE_URLS + self.INCLUDE_PATHS
             extract_link_type = os.getenv('EXTRACT_LINK_TYPE', "").split(',')
             self.EXTRACT_LINK_TYPE = False if extract_link_type == [''] else [file_type.lower() for file_type in extract_link_type]
             self.CRAWL_URLS = os.getenv('CRAWL_URLS', "").split(',')
@@ -129,8 +131,8 @@ class Orchestrator:
                 links = crawler.get_links(body[0], exclude=self.EXCLUDE, file_types=self.EXTRACT_LINK_TYPE)
         
             for link in links:
-                # Check if the link is a child of the base url
-                if any(link.lower().startswith(base_url) for base_url in self.BASE_URLS):
+                # Check if the link is a child of the base url or of include paths
+                if any(link.lower().startswith(base_url) for base_url in self.ALLOWED_BASE_PATHS):
                     # TODO: Do we also need to trim off query string?
                     link = link.split('#')[0]  # Trim off anything after #
                     if link not in self.processed_urls:
