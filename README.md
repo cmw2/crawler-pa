@@ -72,15 +72,16 @@ Add the following environment variables to the Azure Function App.
 | ENABLE_VECTORS | Flag to enable/disable vector (embeddings) computations. | True = Enabled |
 | FORM_RECOGNIZER_ENDPOINT | The Document Intelligence service endpoint. | https://<document_intelligence_name>.cognitiveservices.azure.com/ |
 | FORM_RECOGNIZER_KEY | The Document Intelligence service key. | <document_intelligence_key> |
-| NUM_OF_THREADS | The number of crawler threads. | 4 |
+| NUM_OF_THREADS | The number of crawler threads. | 1 |
 | COSMOS_URL | The Cosmos DB account endpoint for storing the crawler logs. | https://<cosmosdb_account>.documents.azure.com:443/ |
-| COSMOS_DB_KEY | The key for Cosmos DB account | <cosmosdb_key> |
+| COSMOS_DB_KEY | The key for Cosmos DB account. If no key is provided the crawler uses Managed Identity. | <cosmosdb_key> |
+| DELAY | The number of seconds between crawl requests per thread. | 0 (default) |
 
 **Note**: For all credentials and service keys, it is recommended that these are stored in Azure KeyVault for security reasons. Refer to documentation [here](https://learn.microsoft.com/en-us/azure/app-service/app-service-key-vault-references?tabs=azure-cli) for use of Azure KeyVault reference as app settings in Azure Function App.
 
 ## Kick off a Test Crawling
 
 1. Go to Overview page of the function app.
-2. Select the webcrawler function and go to "Code + Test" and click "Test/Run"
+2. Select the webcrawler function and go to "Code + Test" and click "Test/Run" and "Run".
 
    ![test-crawler](media/s2.PNG)

@@ -5,10 +5,10 @@ from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import TimeoutException
 import requests, os, logging
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 class WebCrawler:
-    def __init__(self, base_url, exclude_urls, driver_path=None, agent=None, include_domains=None):
+    def __init__(self, base_url, exclude_urls, driver_path=None, agent=None, include_domains=None, include_urls=None, ignore_anchor_link=False):
         chrome_options = Options()
         # Run Chrome in headless mode
         chrome_options.add_argument("--headless")
@@ -57,6 +57,8 @@ class WebCrawler:
         self.base_url = base_url
         self.exclude_urls = exclude_urls
         self.include_domains = include_domains
+        self.include_urls = include_urls
+        self.ignore_anchor_link = ignore_anchor_link
 
     def visit_url(self, url):
         try:
@@ -127,16 +129,19 @@ class WebCrawler:
         return table_dict
 
 
-    def get_links(self, element, exclude=False, file_types=None):
+    def get_links(self, element, exclude=False, file_types=None, include=True):
         links = []
 
         ref_links = element.find_elements(By.TAG_NAME, "a")
 
+        raw_links = []
+
         if len(ref_links) > 0:
             for ref_link in ref_links:
                 link = ref_link.get_attribute("href")
+                raw_links.append(link)
 
-                if link is not None:
+                if link:
                     link = link.strip()
                     logging.debug(f"Link: {link}")
                 else:
@@ -144,9 +149,28 @@ class WebCrawler:
 
                 parsed_link = urlparse(link)
 
+                if self.ignore_anchor_link:
+                    parsed_link = parsed_link._replace(fragment='')
+                    link = urlunparse(parsed_link)
+
+                if not link and not parsed_link:
+                    continue
+
+
                 if not link.startswith('mailto:') and not (exclude and any(link.startswith(prefix) for prefix in self.exclude_urls)):
                     if self.include_domains and parsed_link.netloc.lower() not in self.include_domains:
                         continue
+
+                    if include:
+                        include_match = False
+                        for include_url in self.include_urls:
+                            logging.info(f"Comparing link: {link} with include_url: {include_url}")
+                            if link.lower().startswith(include_url):
+                                logging.info(f"Link: {link.lower()} matched include_url: {include_url}")
+                                include_match = True
+                                break
+                        if not include_match:
+                            continue
 
                     if file_types:
                         if any(parsed_link.path.lower().endswith(file_type) for file_type in file_types):
@@ -154,7 +178,7 @@ class WebCrawler:
                     else:
                         links.append(link)
         
-        return links
+        return links, raw_links
 
     def get_solicitation_links(self, element):
         links = []

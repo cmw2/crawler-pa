@@ -24,11 +24,15 @@ class Orchestrator:
         if not self._shared_state:
             self.logging = logger
             self.DELAY = int(os.getenv("DELAY", 0))
+            self.CRAWL_DEPTH = int(os.getenv("DEPTH", 2))
+            self.DEPTH = int(os.getenv("DEPTH", 2))
             self.NUM_OF_THREADS = int(os.getenv("NUM_OF_THREADS", 1))
             self.EXCLUDE_LIST = os.getenv('EXCLUDE_LIST', "").split(',')
             self.EXCLUDE = False if self.EXCLUDE_LIST == [''] else True
             include_domains = os.getenv('INCLUDE_DOMAINS', "").split(',')
             self.INCLUDE_DOMAINS = False if include_domains == [''] else [include_domain.lower() for include_domain in include_domains]
+            include_urls = os.getenv('INCLUDE_URLS', "").split(',')
+            self.INCLUDE_URLS = False if include_urls == [''] else [include_urls.lower() for include_urls in include_urls]
             self.BASE_URLS = os.getenv('BASE_URLS', "").split(',')
             extract_link_type = os.getenv('EXTRACT_LINK_TYPE', "").split(',')
             self.EXTRACT_LINK_TYPE = False if extract_link_type == [''] else [file_type.lower() for file_type in extract_link_type]
@@ -36,6 +40,9 @@ class Orchestrator:
 
             enable_vectors_str = os.getenv("ENABLE_VECTORS", "false")
             self.ENABLE_VECTORS = enable_vectors_str.lower() in ['true', '1', 'yes']
+
+            ignore_anchor_link = os.getenv("IGNORE_ANCHOR_LINK", "false")
+            self.IGNORE_ANCHOR_LINK = ignore_anchor_link.lower() in ['true', '1', 'yes']
 
             self.INDEX_NAME = os.getenv("INDEX_NAME", "crawler-index")
             self.SEARCH_ENDPOINT = os.getenv("SEARCH_ENDPOINT")
@@ -55,6 +62,7 @@ class Orchestrator:
         self.logging.info(f"EXCLUDE_LIST: {self.EXCLUDE_LIST}")
         self.logging.info(f"EXCLUDE: {self.EXCLUDE}")
         self.logging.info(f"INCLUDE_DOMAINS: {self.INCLUDE_DOMAINS}")
+        self.logging.info(f"INCLUDE_URLS: {self.INCLUDE_URLS}")
         self.logging.info(f"BASE_URLS: {self.BASE_URLS}")
         self.logging.info(f"EXTRACT_LINK_TYPE: {self.EXTRACT_LINK_TYPE}")
         self.logging.info(f"CRAWL_URLS: {self.CRAWL_URLS}")
@@ -123,7 +131,7 @@ class Orchestrator:
 
 
 
-    def extract_links_to_queue(self, crawler, nextq):
+    def extract_links_to_queue(self, crawler, nextq, depth: int):
         self.logging.info(f"Extracting Links...")
 
         body = crawler.get_elements(By.TAG_NAME, "body")
@@ -131,14 +139,31 @@ class Orchestrator:
         try:
 
             if len(body) > 0:
-                links = crawler.get_links(body[0], exclude=self.EXCLUDE, file_types=self.EXTRACT_LINK_TYPE)
+                links, p_links = crawler.get_links(body[0], exclude=self.EXCLUDE, file_types=self.EXTRACT_LINK_TYPE)
         
+            for p_link in p_links:
+                self.logging.info(f"Link found before applying rules : {p_link}")
+
             for link in links:
-                self.logging.info(f"Link found, adding to crawler queue: {link}")
-                item = {"url": link, "metadata": {}, "type": "crawl"}
-                nextq.put(item)
+                self.logging.info(f"Link found, adding to crawler queue: {link} : at {depth}")
+                item = {"url": link, "metadata": {}, "type": "crawl", "depth": depth + 1}
+
+                if not self.item_in_queue(nextq, item):
+                    nextq.put(item)
         except Exception as e:
             self.logging.error(f"Error in link extraction, Error: {e}")
+
+    def item_in_queue(self, itemQueue, item):
+        # Check if item with the same link already exists in the queue
+        exists = False
+        for q_item in list(itemQueue.queue):
+
+            if q_item.get('url').lower() == item.get('url').lower():
+                self.logging.info(f"Link already in crawler queue : {q_item.get('url')}")
+                exists = True
+                break
+        
+        return exists
 
 
     def url_crawler_consumer(self, q, nextq):
@@ -147,7 +172,7 @@ class Orchestrator:
             if item is None:
                 break
 
-            result = self.crawl_url(item["url"], q, item["type"])
+            result = self.crawl_url(item["url"], q, item["type"], depth=item["depth"])
             if result is not None:
                 content, contenttype = result
 
@@ -164,9 +189,9 @@ class Orchestrator:
         self.logging.info(f"Url Crawler Consumer is done")
 
 
-    def crawl_url(self, url, q, url_type):
+    def crawl_url(self, url, q, url_type, depth):
         """Crawl a URL and return its content and type."""
-        self.logging.info(f"Crawling: {url} of type: {url_type}")
+        self.logging.info(f"Crawling: {url} of type: {url_type} and depth: {depth}")
 
         try:
             parsed_url = urlparse(url)
@@ -180,7 +205,7 @@ class Orchestrator:
                 
                 return response.content, "pdf"
             else:
-                with WebCrawler(base_url=url, exclude_urls=self.EXCLUDE_LIST, agent=self.AGENT_NAME, include_domains=self.INCLUDE_DOMAINS) as crawler:
+                with WebCrawler(base_url=url, exclude_urls=self.EXCLUDE_LIST, agent=self.AGENT_NAME, include_domains=self.INCLUDE_DOMAINS, include_urls=self.INCLUDE_URLS, ignore_anchor_link=self.IGNORE_ANCHOR_LINK) as crawler:
                     crawler.visit_url(url)
                     
                     #self.logging.info(f"URL : {url}, HTML: {crawler.get_page_source()}")
@@ -190,8 +215,11 @@ class Orchestrator:
                     if not self.page_has_changed(url=url, md5_hash=md5_hash):
                         return None
 
-                    if url_type == "base":
-                        self.extract_links_to_queue(crawler=crawler, nextq=q)
+                    """ if url_type == "base":
+                        depth = 0 """
+
+                    if depth < self.CRAWL_DEPTH:
+                        self.extract_links_to_queue(crawler=crawler, nextq=q, depth=depth)
 
                     content = crawler.parse_page()
                     return content, "text"
@@ -406,6 +434,7 @@ class Orchestrator:
             item = dict()
             item["url"] = base_url
             item["type"] = "base"
+            item["depth"] = 0
 
             url_crawler_queue.put(item=item)
             #base_crawler_queue.put(base_url)
@@ -419,6 +448,7 @@ class Orchestrator:
             item = dict()
             item["url"] = url
             item["type"] = "crawl"
+            item["depth"] = 0
 
             url_crawler_queue.put(item=item)
 
