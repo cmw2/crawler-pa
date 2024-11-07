@@ -8,7 +8,7 @@ import requests, os, logging
 from urllib.parse import urlparse, urlunparse
 
 class WebCrawler:
-    def __init__(self, base_url, exclude_urls, driver_path=None, agent=None, include_domains=None, include_urls=None, ignore_anchor_link=False):
+    def __init__(self, base_url, exclude_urls, driver_path=None, agent=None, include_domains=None, include_urls=None, include_urls_regex=None, ignore_anchor_link=False):
         chrome_options = Options()
         # Run Chrome in headless mode
         chrome_options.add_argument("--headless")
@@ -59,6 +59,7 @@ class WebCrawler:
         self.include_domains = include_domains
         self.include_urls = include_urls
         self.ignore_anchor_link = ignore_anchor_link
+        self.include_urls_regex = include_urls_regex
 
     def visit_url(self, url):
         try:
@@ -163,12 +164,19 @@ class WebCrawler:
 
                     if include:
                         include_match = False
-                        for include_url in self.include_urls:
-                            logging.info(f"Comparing link: {link} with include_url: {include_url}")
-                            if link.lower().startswith(include_url):
-                                logging.info(f"Link: {link.lower()} matched include_url: {include_url}")
-                                include_match = True
-                                break
+
+                        if self.include_urls_regex and any(pattern.fullmatch(link) for pattern in self.include_urls_regex):
+                            logging.info(f"Link: {link} matched with one of include url regex")
+                            include_match = True
+
+                        if self.include_urls:
+                            for include_url in self.include_urls:
+                                logging.info(f"Comparing link: {link} with include url: {include_url}")
+                                if link.lower().startswith(include_url):
+                                    logging.info(f"Link: {link.lower()} matched include url: {include_url}")
+                                    include_match = True
+                                    break
+
                         if not include_match:
                             continue
 
@@ -178,7 +186,16 @@ class WebCrawler:
                     else:
                         links.append(link)
         
-        return links, raw_links
+        return self.remove_duplicate_links(links), raw_links
+    
+    def remove_duplicate_links(self, links):
+        seen = set()
+        unique_links = []
+        for link in links:
+            if link not in seen:
+                unique_links.append(link)
+                seen.add(link)
+        return unique_links
 
     def get_solicitation_links(self, element):
         links = []
