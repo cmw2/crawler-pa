@@ -22,6 +22,8 @@ class Orchestrator:
     def __init__(self, logger):
         self.__dict__ = self._shared_state
 
+        regex_patterns = []
+
         if not self._shared_state:
             self.logging = logger
             self.DELAY = int(os.getenv("DELAY", 0))
