@@ -28,7 +28,6 @@ class Orchestrator:
             self.logging = logger
             self.DELAY = int(os.getenv("DELAY", 0))
             self.CRAWL_DEPTH = int(os.getenv("DEPTH", 2))
-            self.DEPTH = int(os.getenv("DEPTH", 2))
             self.NUM_OF_THREADS = int(os.getenv("NUM_OF_THREADS", 1))
             self.EXCLUDE_LIST = os.getenv('EXCLUDE_LIST', "").split(',')
             self.EXCLUDE = False if self.EXCLUDE_LIST == [''] else True
@@ -36,7 +35,7 @@ class Orchestrator:
             self.INCLUDE_DOMAINS = False if include_domains == [''] else [include_domain.lower() for include_domain in include_domains]
             include_urls = os.getenv('INCLUDE_URLS', "").split(',')
             self.INCLUDE_URLS = False if include_urls == [''] else [include_urls.lower() for include_urls in include_urls]
-            regex_patterns = os.getenv('INCLUDE_URLS_REGEX').split('|')
+            regex_patterns = os.getenv('INCLUDE_URLS_REGEX', '').split('|')
             compiled_patterns = [re.compile(pattern) for pattern in regex_patterns]
             self.INCLUDE_URLS_REGEX = False if regex_patterns == [''] else compiled_patterns
             self.BASE_URLS = os.getenv('BASE_URLS', "").split(',')
@@ -380,6 +379,10 @@ class Orchestrator:
                         expired_links.append(url)
                     else:
                         self.container.replace_item(item=item['id'], body=item)
+
+                if self.DELAY:
+                    self.logging.info(f"Pausing link check for {self.DELAY} seconds.")
+                    time.sleep(self.DELAY)
 
             except Exception as e:
                 self.logging.error(f"Error occurred while checking {url}, Exception: {e}")

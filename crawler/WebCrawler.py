@@ -181,8 +181,14 @@ class WebCrawler:
                             continue
 
                     if file_types:
-                        if any(parsed_link.path.lower().endswith(file_type) for file_type in file_types):
-                            links.append(link)
+                        for file_type in file_types:
+                            logging.info(f"Link: {parsed_link.path.lower()} comparing with file type: {file_type}")
+                            if parsed_link.path.lower().endswith(file_type):
+                                links.append(link)
+                                break
+                            if file_type == 'html' and '.' not in parsed_link.path:
+                                links.append(link)
+                                break
                     else:
                         links.append(link)
         
