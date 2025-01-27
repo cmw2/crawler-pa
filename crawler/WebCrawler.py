@@ -144,7 +144,7 @@ class WebCrawler:
 
                 if link:
                     link = link.strip()
-                    logging.debug(f"Link: {link}")
+                    logging.info(f"Link found on the page: {link}")
                 else:
                     continue
 
@@ -159,39 +159,48 @@ class WebCrawler:
 
 
                 if not link.startswith('mailto:') and not (exclude and any(link.startswith(prefix) for prefix in self.exclude_urls)):
+                    logging.info(f"Link not excluded by exclude URLs: {link}")
                     if self.include_domains and parsed_link.netloc.lower() not in self.include_domains:
+                        logging.info(f"Link not included by domain rules: {link}")
                         continue
 
                     if include:
+                        logging.info(f"Link checking with Include URLs: {link}")
                         include_match = False
 
                         if self.include_urls_regex and any(pattern.fullmatch(link) for pattern in self.include_urls_regex):
-                            logging.info(f"Link: {link} matched with one of include url regex")
+                            logging.debug(f"Link: {link} matched with one of include url regex")
                             include_match = True
 
                         if self.include_urls:
                             for include_url in self.include_urls:
-                                logging.info(f"Comparing link: {link} with include url: {include_url}")
+                                logging.debug(f"Comparing link: {link} with include url: {include_url}")
                                 if link.lower().startswith(include_url):
-                                    logging.info(f"Link: {link.lower()} matched include url: {include_url}")
+                                    logging.debug(f"Link: {link.lower()} matched include url: {include_url}")
                                     include_match = True
                                     break
 
                         if not include_match:
                             continue
 
+                    
                     if file_types:
+                        logging.info(f"Link checking with File Types: {link}")
                         for file_type in file_types:
-                            logging.info(f"Link: {parsed_link.path.lower()} comparing with file type: {file_type}")
+                            logging.debug(f"Link: {parsed_link.path.lower()} comparing with file type: {file_type}")
                             if parsed_link.path.lower().endswith(file_type):
                                 links.append(link)
+                                logging.info(f"Link extracted: {link}")
                                 break
                             if file_type == 'html' and '.' not in parsed_link.path:
                                 links.append(link)
+                                logging.info(f"Link extracted: {link}")
                                 break
                     else:
+                        logging.info(f"Link extracted: {link}")
                         links.append(link)
         
+        logging.debug(f"All Links Extracted : {links}")
         return self.remove_duplicate_links(links), raw_links
     
     def remove_duplicate_links(self, links):

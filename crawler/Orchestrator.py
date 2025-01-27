@@ -68,7 +68,7 @@ class Orchestrator:
         self.logging.info(f"EXCLUDE: {self.EXCLUDE}")
         self.logging.info(f"INCLUDE_DOMAINS: {self.INCLUDE_DOMAINS}")
         self.logging.info(f"INCLUDE_URLS: {self.INCLUDE_URLS}")
-        self.logging.info(f"INCLUDE_URLS_REGEX: {regex_patterns}")
+        self.logging.info(f"INCLUDE_URLS_REGEX: {self.INCLUDE_URLS_REGEX}")
         self.logging.info(f"BASE_URLS: {self.BASE_URLS}")
         self.logging.info(f"EXTRACT_LINK_TYPE: {self.EXTRACT_LINK_TYPE}")
         self.logging.info(f"CRAWL_URLS: {self.CRAWL_URLS}")
@@ -145,10 +145,11 @@ class Orchestrator:
         try:
 
             if len(body) > 0:
-                links, p_links = crawler.get_links(body[0], exclude=self.EXCLUDE, file_types=self.EXTRACT_LINK_TYPE)
+                links, p_links = crawler.get_links(body[0], exclude=self.EXCLUDE, file_types=self.EXTRACT_LINK_TYPE, include=(self.INCLUDE_URLS or self.INCLUDE_URLS_REGEX))
         
-            for p_link in p_links:
-                self.logging.info(f"Link found before applying rules : {p_link}")
+        
+            #for p_link in p_links:
+                #self.logging.info(f"Link found before applying rules : {p_link}")
 
             for link in links:
                 self.logging.info(f"Link found, adding to crawler queue: {link} : at {depth}")
@@ -292,6 +293,7 @@ class Orchestrator:
                     try:
                         # Upload the documents to the index
                         upload_documents_to_index(docs=batch, search_client=search_client, upload_batch_size=len(batch))
+                        self.logging.info(f"Search Indexer Consumer uploaded {len(batch)} documents to the index")
                     except Exception as e:
                         self.logging.error(f"Error uploading document to index: {e}")
                 break
@@ -303,6 +305,7 @@ class Orchestrator:
                 try:
                     # Upload the documents to the index
                     upload_documents_to_index(docs=batch, search_client=search_client, upload_batch_size=batch_size)
+                    self.logging.info(f"Search Indexer Consumer uploaded {len(batch)} documents to the index")
                 except Exception as e:
                     self.logging.error(f"Error uploading document to index: {e}")
                 finally:
