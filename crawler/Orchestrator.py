@@ -31,13 +31,19 @@ class Orchestrator:
             self.NUM_OF_THREADS = int(os.getenv("NUM_OF_THREADS", 1))
             self.EXCLUDE_LIST = os.getenv('EXCLUDE_LIST', "").split(',')
             self.EXCLUDE = False if self.EXCLUDE_LIST == [''] else True
+            
             include_domains = os.getenv('INCLUDE_DOMAINS', "").split(',')
             self.INCLUDE_DOMAINS = False if include_domains == [''] else [include_domain.lower() for include_domain in include_domains]
+            in_domain_regex_patterns = os.getenv('INCLUDE_DOMAINS_REGEX', '').split('|')
+            in_domain_compiled_patterns = [re.compile(pattern) for pattern in in_domain_regex_patterns]
+            self.INCLUDE_DOMAINS_REGEX = False if in_domain_regex_patterns == [''] else in_domain_compiled_patterns
+            
             include_urls = os.getenv('INCLUDE_URLS', "").split(',')
             self.INCLUDE_URLS = False if include_urls == [''] else [include_urls.lower() for include_urls in include_urls]
-            regex_patterns = os.getenv('INCLUDE_URLS_REGEX', '').split('|')
-            compiled_patterns = [re.compile(pattern) for pattern in regex_patterns]
-            self.INCLUDE_URLS_REGEX = False if regex_patterns == [''] else compiled_patterns
+            in_url_regex_patterns = os.getenv('INCLUDE_URLS_REGEX', '').split('|')
+            in_url_compiled_patterns = [re.compile(pattern) for pattern in in_url_regex_patterns]
+            self.INCLUDE_URLS_REGEX = False if in_url_regex_patterns == [''] else in_url_compiled_patterns
+            
             self.BASE_URLS = os.getenv('BASE_URLS', "").split(',')
             extract_link_type = os.getenv('EXTRACT_LINK_TYPE', "").split(',')
             self.EXTRACT_LINK_TYPE = False if extract_link_type == [''] else [file_type.lower() for file_type in extract_link_type]
@@ -67,8 +73,9 @@ class Orchestrator:
         self.logging.info(f"EXCLUDE_LIST: {self.EXCLUDE_LIST}")
         self.logging.info(f"EXCLUDE: {self.EXCLUDE}")
         self.logging.info(f"INCLUDE_DOMAINS: {self.INCLUDE_DOMAINS}")
+        self.logging.info(f"INCLUDE_DOMAINS_REGEX: {in_domain_regex_patterns}")
         self.logging.info(f"INCLUDE_URLS: {self.INCLUDE_URLS}")
-        self.logging.info(f"INCLUDE_URLS_REGEX: {self.INCLUDE_URLS_REGEX}")
+        self.logging.info(f"INCLUDE_URLS_REGEX: {in_url_regex_patterns}")
         self.logging.info(f"BASE_URLS: {self.BASE_URLS}")
         self.logging.info(f"EXTRACT_LINK_TYPE: {self.EXTRACT_LINK_TYPE}")
         self.logging.info(f"CRAWL_URLS: {self.CRAWL_URLS}")
@@ -212,7 +219,7 @@ class Orchestrator:
                 
                 return response.content, "pdf"
             else:
-                with WebCrawler(base_url=url, exclude_urls=self.EXCLUDE_LIST, agent=self.AGENT_NAME, include_domains=self.INCLUDE_DOMAINS, include_urls=self.INCLUDE_URLS, include_urls_regex=self.INCLUDE_URLS_REGEX, ignore_anchor_link=self.IGNORE_ANCHOR_LINK) as crawler:
+                with WebCrawler(base_url=url, exclude_urls=self.EXCLUDE_LIST, agent=self.AGENT_NAME, include_domains=self.INCLUDE_DOMAINS, include_urls=self.INCLUDE_URLS, include_urls_regex=self.INCLUDE_URLS_REGEX, ignore_anchor_link=self.IGNORE_ANCHOR_LINK, include_domains_regex=self.INCLUDE_DOMAINS_REGEX) as crawler:
                     crawler.visit_url(url)
                     
                     #self.logging.info(f"URL : {url}, HTML: {crawler.get_page_source()}")

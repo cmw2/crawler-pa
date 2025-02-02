@@ -8,7 +8,7 @@ import requests, os, logging
 from urllib.parse import urlparse, urlunparse
 
 class WebCrawler:
-    def __init__(self, base_url, exclude_urls, driver_path=None, agent=None, include_domains=None, include_urls=None, include_urls_regex=None, ignore_anchor_link=False):
+    def __init__(self, base_url, exclude_urls, driver_path=None, agent=None, include_domains=None, include_urls=None, include_urls_regex=None, include_domains_regex=None, ignore_anchor_link=False):
         chrome_options = Options()
         # Run Chrome in headless mode
         chrome_options.add_argument("--headless")
@@ -60,6 +60,7 @@ class WebCrawler:
         self.include_urls = include_urls
         self.ignore_anchor_link = ignore_anchor_link
         self.include_urls_regex = include_urls_regex
+        self.include_domains_regex = include_domains_regex
 
     def visit_url(self, url):
         try:
@@ -162,6 +163,10 @@ class WebCrawler:
                     logging.info(f"Link not excluded by exclude URLs: {link}")
                     if self.include_domains and parsed_link.netloc.lower() not in self.include_domains:
                         logging.info(f"Link not included by domain rules: {link}")
+                        continue
+
+                    if self.include_domains_regex and not any(pattern.fullmatch(parsed_link.netloc.lower()) for pattern in self.include_domains_regex):
+                        logging.info(f"Link not included by domain regex rules: {link}")
                         continue
 
                     if include:
