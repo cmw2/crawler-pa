@@ -628,6 +628,10 @@ def get_embedding(text, embedding_model_endpoint=None, embedding_model_key=None,
         base_url = endpoint_parts[0]
         deployment_id = endpoint_parts[1].split("/embeddings")[0]
 
+        display_key = key[:3] + "..." + key[-3:]
+
+        logging.info(f"Getting embedding for text with endpoint base url={base_url} : deployment={deployment_id} : endpoint={endpoint} : key={display_key}")
+
         openai.api_version = '2023-05-15'
         openai.api_base = base_url
 
@@ -641,6 +645,9 @@ def get_embedding(text, embedding_model_endpoint=None, embedding_model_key=None,
         for _ in range(RETRY_COUNT):
             try:
                 embeddings = openai.Embedding.create(deployment_id=deployment_id, input=text)
+                
+                logging.info(f"Embedding response: {embeddings['data'][0]['embedding'][:5]}")
+
                 return embeddings['data'][0]["embedding"]
             except RateLimitError:
                 s = random.randint(*SLEEP_TIME_RANGE)

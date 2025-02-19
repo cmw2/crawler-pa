@@ -27,6 +27,7 @@ class Orchestrator:
         if not self._shared_state:
             self.logging = logger
             self.DELAY = int(os.getenv("DELAY", 0))
+            self.INDEXER_BATCH_SIZE = int(os.getenv("INDEXER_BATCH_SIZE", 100))
             self.CRAWL_DEPTH = int(os.getenv("DEPTH", 2))
             self.NUM_OF_THREADS = int(os.getenv("NUM_OF_THREADS", 1))
             self.EXCLUDE_LIST = os.getenv('EXCLUDE_LIST', "").split(',')
@@ -232,7 +233,7 @@ class Orchestrator:
                     """ if url_type == "base":
                         depth = 0 """
 
-                    if depth < self.CRAWL_DEPTH:
+                    if depth < self.CRAWL_DEPTH and url_type == "base":
                         self.extract_links_to_queue(crawler=crawler, nextq=q, depth=depth)
 
                     content = crawler.parse_page()
@@ -272,7 +273,7 @@ class Orchestrator:
                     chunk.sourcepage = str(i)
                     chunk.sourcefile = str(item["url"])
 
-                    self.logging.info(f"Processed Chunk for url: {chunk.url} - Chunk Id: {chunk.id}")
+                    self.logging.info(f"Processed Chunk for url: {chunk.url} - Chunk id: {chunk.id} - Chunk embedding: {chunk.embedding[:5]}")
 
                     nextq.put(chunk)
 
@@ -288,6 +289,8 @@ class Orchestrator:
 
 
     def indexer_consumer(self, q, search_client, batch_size=100):
+
+        batch_size = self.INDEXER_BATCH_SIZE
         
         self.logging.info(f"Indexing consumer running with batch size: {batch_size}")
 
