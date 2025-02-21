@@ -615,12 +615,13 @@ def merge_chunks_serially(chunked_content_list: List[str], num_tokens: int) -> G
         yield current_chunk, total_size
 
 
-def get_embedding(text, embedding_model_endpoint=None, embedding_model_key=None, azure_credential=None):
+def get_embedding(text, embedding_model_endpoint=None, embedding_model_key=None, azure_credential=None, logger=None):
+    
     endpoint = embedding_model_endpoint if embedding_model_endpoint else os.environ.get("EMBEDDING_MODEL_ENDPOINT")
     key = embedding_model_key if embedding_model_key else os.environ.get("EMBEDDING_MODEL_KEY")
     
     if azure_credential is None and (endpoint is None or key is None):
-        logging.error("EMBEDDING_MODEL_ENDPOINT and EMBEDDING_MODEL_KEY are required for embedding")
+        logger.error("EMBEDDING_MODEL_ENDPOINT and EMBEDDING_MODEL_KEY are required for embedding")
         raise Exception("EMBEDDING_MODEL_ENDPOINT and EMBEDDING_MODEL_KEY are required for embedding")
 
     try:
@@ -630,7 +631,7 @@ def get_embedding(text, embedding_model_endpoint=None, embedding_model_key=None,
 
         display_key = key[:3] + "..." + key[-3:]
 
-        logging.info(f"Getting embedding for text with endpoint base url={base_url} : deployment={deployment_id} : endpoint={endpoint} : key={display_key}")
+        logger.info(f"Getting embedding for text with endpoint base url={base_url} : deployment={deployment_id} : endpoint={endpoint} : key={display_key}")
 
         openai.api_version = '2023-05-15'
         openai.api_base = base_url
@@ -646,19 +647,20 @@ def get_embedding(text, embedding_model_endpoint=None, embedding_model_key=None,
             try:
                 embeddings = openai.Embedding.create(deployment_id=deployment_id, input=text)
                 
-                logging.info(f"Embedding response: {embeddings['data'][0]['embedding'][:5]}")
+                logger.info(f"Embedding response: {embeddings['data'][0]['embedding'][:5]}")
 
                 return embeddings['data'][0]["embedding"]
             except RateLimitError:
                 s = random.randint(*SLEEP_TIME_RANGE)
-                logging.info(f"Sleeping for {s} seconds before retrying. Retry : {_}")
+                logger.info(f"Sleeping for {s} seconds before retrying. Retry : {_}")
                 time.sleep(s)
             except Exception as e:
+                logger.error(f"Error getting embeddings with endpoint={endpoint} with error={e}")
                 raise e
             
 
     except Exception as e:
-        logging.error(f"Error getting embeddings with endpoint={endpoint} with error={e}")
+        logger.error(f"Error getting embeddings with endpoint={endpoint} with error={e}")
         #raise Exception(f"Error getting embeddings with endpoint={endpoint} with error={e}")
 
 
@@ -715,7 +717,8 @@ def chunk_content(
     use_layout = False,
     add_embeddings = False,
     azure_credential = None,
-    embedding_endpoint = None
+    embedding_endpoint = None,
+    logger: logging.Logger = None
 ) -> ChunkingResult:
     """Chunks the given content. If ignore_errors is true, returns None
         in case of an error
@@ -754,10 +757,11 @@ def chunk_content(
         for chunk, chunk_size, doc in chunked_context:
             if chunk_size >= min_chunk_size:
                 if add_embeddings:
-                    doc.embedding = get_embedding(chunk, azure_credential=azure_credential, embedding_model_endpoint=embedding_endpoint)
+                    doc.embedding = get_embedding(chunk, azure_credential=azure_credential, embedding_model_endpoint=embedding_endpoint, logger=logger)
 
                     if doc.embedding is None:
-                        logging.error(f"Error getting embedding for chunk={chunk}")
+                        logger.error(f"Error getting embedding for chunk={chunk}")
+                        doc.embedding = []
                         #raise Exception(f"Error getting embedding for chunk={chunk}")
                     
                 chunks.append(
@@ -866,7 +870,8 @@ def chunk_file_content(
     add_embeddings=False,
     azure_credential = None,
     embedding_endpoint = None,
-    metadata: Dict = None
+    metadata: Dict = None,
+    logger: logging.Logger = None
 ) -> ChunkingResult:
     """Chunks the given file.
     Args:
@@ -874,6 +879,8 @@ def chunk_file_content(
     Returns:
         List[Document]: List of chunked documents.
     """
+    if logger is None:
+        logger = logging.getLogger()
 
     if not file_format:
         if ignore_errors:
@@ -909,7 +916,8 @@ def chunk_file_content(
         use_layout=use_layout,
         add_embeddings=add_embeddings,
         azure_credential=azure_credential,
-        embedding_endpoint=embedding_endpoint
+        embedding_endpoint=embedding_endpoint,
+        logger=logger
     )
 
 

@@ -161,7 +161,7 @@ class Orchestrator:
 
             for link in links:
                 self.logging.info(f"Link found, adding to crawler queue: {link} : at {depth}")
-                item = {"url": link, "metadata": {}, "type": "crawl", "depth": depth + 1}
+                item = {"url": link, "metadata": {}, "type": "base", "depth": depth + 1}
 
                 if not self.item_in_queue(nextq, item):
                     nextq.put(item)
@@ -262,7 +262,8 @@ class Orchestrator:
                     add_embeddings=self.ENABLE_VECTORS,
                     form_recognizer_client=self.form_recognizer_client if item["contenttype"] == "pdf" else None,
                     use_layout=True if item["contenttype"] == "pdf" else False,
-                    metadata = item.get("metadata", None)
+                    metadata = item.get("metadata", None),
+                    logger=self.logging
                 )
 
                 i=0
@@ -273,7 +274,10 @@ class Orchestrator:
                     chunk.sourcepage = str(i)
                     chunk.sourcefile = str(item["url"])
 
-                    self.logging.info(f"Processed Chunk for url: {chunk.url} - Chunk id: {chunk.id} - Chunk embedding: {chunk.embedding[:5]}")
+                    if chunk.embedding is not None:
+                        self.logging.info(f"Processed Chunk for url: {chunk.url} - Chunk id: {chunk.id} - Chunk embedding: {chunk.embedding[:5]}")
+                    else:
+                        self.logging.info(f"Processed Chunk for url: {chunk.url} - Chunk id: {chunk.id} - No embedding available")
 
                     nextq.put(chunk)
 
