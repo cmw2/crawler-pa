@@ -13,7 +13,7 @@ from datetime import datetime
 from azure.cosmos import CosmosClient, PartitionKey
 from azure.identity import DefaultAzureCredential
 
-
+#v1.0.0
 app = func.FunctionApp()
 
 schedule = os.getenv('SCHEDULE', '0 0 * * *')
