@@ -388,10 +388,13 @@ module functionApp './core/host/functions.bicep' = {
     name: functionAppResourceName
     location: location
     tags: union(tags, { 'azd-service-name': apiServiceName })
+    kind: 'functionapp,linux,container'
+    alwaysOn: true
     appServicePlanId: useExistingAppServicePlan ? existingAppServicePlan.id : appServicePlan.outputs.id
     runtimeName: 'custom'
     runtimeVersion: ''
-    storageAccountName: storageAccountResourceName
+    enableOryxBuild: false
+    storageAccountName: useExistingStorageAccount ? existingStorageAccount.name : storageAccount.outputs.name
     linuxFxVersion: 'DOCKER|${useExistingACR ? existingAcr.properties.loginServer : acr.outputs.loginServer}/crawler/crawler:latest'
     appSettings: {
       // Basic configuration settings
@@ -402,22 +405,23 @@ module functionApp './core/host/functions.bicep' = {
       EXTRACT_LINK_TYPE: 'pdf'
       NUM_OF_THREADS: '2'
       INDEX_NAME: searchIndexName
-      COSMOS_DATABASE_NAME: cosmosDBDatabaseName
-      COSMOS_CONTAINER_NAME: cosmosDBContainerName // this might not be used by the code yet
+      // COSMOS_DATABASE_NAME: cosmosDBDatabaseName
+      // COSMOS_CONTAINER_NAME: cosmosDBContainerName // this might not be used by the code yet
       
       // Docker registry settings
-      DOCKER_REGISTRY_SERVER_URL: useExistingACR ? existingAcr.properties.loginServer : acr.outputs.loginServer
+      DOCKER_REGISTRY_SERVER_URL: 'https://${useExistingACR ? existingAcr.properties.loginServer : acr.outputs.loginServer}'
       DOCKER_REGISTRY_SERVER_USERNAME: useExistingACR ? existingAcr.listCredentials().username : listCredentials(resourceId(subscription().subscriptionId, rg.name, 'Microsoft.ContainerRegistry/registries', containerRegistryResourceName), '2023-07-01').username
       DOCKER_REGISTRY_SERVER_PASSWORD: useExistingACR ? existingAcr.listCredentials().passwords[0].value : listCredentials(resourceId(subscription().subscriptionId, rg.name, 'Microsoft.ContainerRegistry/registries', containerRegistryResourceName), '2023-07-01').passwords[0].value
       
       // Storage settings
-      WEBSITE_CONTENTAZUREFILECONNECTIONSTRING: useExistingStorageAccount 
-        ? 'DefaultEndpointsProtocol=https;AccountName=${storageAccountResourceName};AccountKey=${existingStorageAccount.listKeys().keys[0].value}' 
-        : 'DefaultEndpointsProtocol=https;AccountName=${storageAccountResourceName};AccountKey=${listKeys(resourceId(subscription().subscriptionId, rg.name, 'Microsoft.Storage/storageAccounts', storageAccountResourceName), '2023-01-01').keys[0].value}'
-      WEBSITE_CONTENTSHARE: toLower(functionAppResourceName)
+      WEBSITES_ENABLE_APP_SERVICE_STORAGE: 'false'
+      // WEBSITE_CONTENTAZUREFILECONNECTIONSTRING: useExistingStorageAccount 
+      //   ? 'DefaultEndpointsProtocol=https;AccountName=${storageAccountResourceName};AccountKey=${existingStorageAccount.listKeys().keys[0].value}' 
+      //   : 'DefaultEndpointsProtocol=https;AccountName=${storageAccountResourceName};AccountKey=${listKeys(resourceId(subscription().subscriptionId, rg.name, 'Microsoft.Storage/storageAccounts', storageAccountResourceName), '2023-01-01').keys[0].value}'
+      // WEBSITE_CONTENTSHARE: toLower(functionAppResourceName)
       AzureWebJobsStorage: useExistingStorageAccount 
-        ? 'DefaultEndpointsProtocol=https;AccountName=${storageAccountResourceName};AccountKey=${existingStorageAccount.listKeys().keys[0].value}' 
-        : 'DefaultEndpointsProtocol=https;AccountName=${storageAccountResourceName};AccountKey=${listKeys(resourceId(subscription().subscriptionId, rg.name, 'Microsoft.Storage/storageAccounts', storageAccountResourceName), '2023-01-01').keys[0].value}'
+        ? 'DefaultEndpointsProtocol=https;AccountName=${existingStorageAccount.name};AccountKey=${existingStorageAccount.listKeys().keys[0].value}' 
+        : 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.outputs.name};AccountKey=${listKeys(resourceId(subscription().subscriptionId, rg.name, 'Microsoft.Storage/storageAccounts', storageAccountResourceName), '2023-01-01').keys[0].value}'
       
       // Search settings
       SEARCH_ENDPOINT: useExistingAISearch ? 'https://${aiSearchName}.search.windows.net' : search.outputs.endpoint
@@ -446,25 +450,24 @@ module functionApp './core/host/functions.bicep' = {
         : listKeys(resourceId(subscription().subscriptionId, rg.name, 'Microsoft.DocumentDB/databaseAccounts', cosmosDBAccountResourceName), '2023-11-15').primaryMasterKey
         
       // Application Insights settings
-      APPLICATIONINSIGHTS_CONNECTION_STRING: ''  // Will need to be configured post-deployment
+      //APPLICATIONINSIGHTS_CONNECTION_STRING: ''  // Will need to be configured post-deployment
       
       // Azure AD / Service Principal settings (if using service principal authentication)
-      AZURE_TENANT_ID: ''  // Will need to be configured post-deployment
-      AZURE_CLIENT_ID: ''  // Will need to be configured post-deployment
-      AZURE_CLIENT_SECRET: ''  // Will need to be configured post-deployment
+      // AZURE_TENANT_ID: ''  // Will need to be configured post-deployment
+      // AZURE_CLIENT_ID: ''  // Will need to be configured post-deployment
+      // AZURE_CLIENT_SECRET: ''  // Will need to be configured post-deployment
     }
   }
 }
-
 
 // Add outputs to be referenced by other deployments or for local development
 output AZURE_LOCATION string = location
 output AZURE_TENANT_ID string = tenant().tenantId
 output AZURE_RESOURCE_GROUP string = rg.name
 
-// // Function App outputs
-// output FUNCTION_APP_NAME string = functionAppResourceName
-// output FUNCTION_APP_URL string = functionApp.outputs.uri
+// Function App outputs
+output FUNCTION_APP_NAME string = functionAppResourceName
+output FUNCTION_APP_URL string = functionApp.outputs.uri
 
 // Storage Account outputs
 output STORAGE_ACCOUNT_NAME string = storageAccountResourceName
@@ -483,3 +486,4 @@ output EMBEDDING_MODEL_ENDPOINT string = useExistingOpenAI ? '${existingOpenAI.p
 
 // Cosmos DB outputs
 output COSMOS_DB_URL string = useExistingCosmosDBAccount ? existingCosmosDB.properties.documentEndpoint : cosmosDB.outputs.endpoint
+
