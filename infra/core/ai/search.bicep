@@ -15,6 +15,15 @@ param tags object = {}
 @allowed(['disabled', 'free', 'standard'])
 param semanticSearch string = 'disabled'
 
+@description('The name of the Key Vault to store the search key.')
+param keyVaultName string = ''
+
+@description('The resource group where the Key Vault is located.')
+param keyVaultResourceGroup string = resourceGroup().name
+
+@description('The name of the secret to store the search key in the Key Vault.')
+param searchKeySecretName string = 'search-key'
+
 resource search 'Microsoft.Search/searchServices@2023-11-01' = {
   name: name
   location: location
@@ -31,6 +40,19 @@ resource search 'Microsoft.Search/searchServices@2023-11-01' = {
   }
 }
 
+// Save the search key to the KeyVault if a KeyVault name is provided
+module searchKeySecret '../security/keyvault-secret.bicep' = if (!empty(keyVaultName)) {
+  name: '${name}-search-key-secret'
+  scope: resourceGroup(keyVaultResourceGroup)
+  params: {
+    keyVaultName: keyVaultName
+    name: searchKeySecretName
+    contentType: 'text/plain'
+    secretValue: search.listAdminKeys().primaryKey
+    tags: tags
+  }
+}
+
 @description('The Azure AI Search service name.')
 output name string = search.name
 
@@ -39,3 +61,6 @@ output endpoint string = 'https://${search.name}.search.windows.net'
 
 @description('The Azure AI Search service resource ID.')
 output id string = search.id
+
+@description('The secret name where the search key is stored in the Key Vault.')
+output secretName string = !empty(keyVaultName) ? searchKeySecretName : ''

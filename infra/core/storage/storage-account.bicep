@@ -38,6 +38,16 @@ param networkAcls object = {
 @description('Enables Hierarchical Namespace for the storage account')
 param isHnsEnabled bool = false
 
+@description('The name of the Key Vault to store the storage account connection string.')
+param keyVaultName string = ''
+
+@description('The resource group where the Key Vault is located.')
+param keyVaultResourceGroup string = resourceGroup().name
+
+@description('The name of the secret to store the storage account connection string in the Key Vault.')
+param connectionStringSecretName string = 'storage-connection-string'
+
+
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   name: name
   location: location
@@ -74,6 +84,20 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   }
 }
 
+// Save the storage connection string to the KeyVault if a KeyVault name is provided
+module storageConnectionStringSecret '../security/keyvault-secret.bicep' = if (!empty(keyVaultName)) {
+  name: '${name}-storage-connection-string-secret'
+  scope: resourceGroup(keyVaultResourceGroup)
+  params: {
+    keyVaultName: keyVaultName
+    name: connectionStringSecretName
+    contentType: 'text/plain'
+    secretValue: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
+    tags: tags
+  }
+}
+
+
 @description('The name of the storage account')
 output name string = storageAccount.name
 
@@ -91,4 +115,6 @@ output tableEndpoint string = storageAccount.properties.primaryEndpoints.table
 
 @description('The storage account primary endpoint for queues')
 output queueEndpoint string = storageAccount.properties.primaryEndpoints.queue
+
+output secretName string = !empty(keyVaultName) ? connectionStringSecretName : ''
 

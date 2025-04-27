@@ -73,6 +73,19 @@ param zoneRedundancy string = 'Disabled'
 @description('The log analytics workspace ID used for logging and monitoring')
 param workspaceId string = ''
 
+@description('The name of the Key Vault to store the ACR credentials.')
+param keyVaultName string = ''
+
+@description('The resource group where the Key Vault is located.')
+param keyVaultResourceGroup string = resourceGroup().name
+
+@description('The name of the secret to store the ACR username in the Key Vault.')
+param usernameSecretName string = 'acr-username'
+
+@description('The name of the secret to store the ACR password in the Key Vault.')
+param passwordSecretName string = 'acr-password'
+
+
 // 2023-11-01-preview needed for metadataSearch
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' = {
   name: name
@@ -132,6 +145,34 @@ resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' 
   }
 }
 
+// Save the ACR credentials to the KeyVault if a KeyVault name is provided
+module acrUsernameSecret '../security/keyvault-secret.bicep' = if (!empty(keyVaultName) && adminUserEnabled) {
+  name: '${name}-acr-username-secret'
+  scope: resourceGroup(keyVaultResourceGroup)
+  params: {
+    keyVaultName: keyVaultName
+    name: usernameSecretName
+    contentType: 'text/plain'
+    secretValue: containerRegistry.listCredentials().username
+    tags: tags
+  }
+}
+
+module acrPasswordSecret '../security/keyvault-secret.bicep' = if (!empty(keyVaultName) && adminUserEnabled) {
+  name: '${name}-acr-password-secret'
+  params: {
+    keyVaultName: keyVaultName
+    name: passwordSecretName
+    contentType: 'text/plain'
+    secretValue: containerRegistry.listCredentials().passwords[0].value
+    tags: tags
+  }
+}
+
 output id string = containerRegistry.id
 output loginServer string = containerRegistry.properties.loginServer
 output name string = containerRegistry.name
+output usernameSecretName string = !empty(keyVaultName) && adminUserEnabled ? usernameSecretName : ''
+#disable-next-line outputs-should-not-contain-secrets // Doesn't contain a password
+output passwordSecretName string = !empty(keyVaultName) && adminUserEnabled ? passwordSecretName : ''
+

@@ -20,6 +20,66 @@ param location string
 // }
 param resourceGroupName string = ''
 
+// Add parameter for deploying user's object ID
+@description('Object ID of the current user or service principal deploying the template. This user will be granted access to Key Vault.')
+param deploymentPrincipalId string = ''
+
+// Crawler configuration parameters
+@description('Comma-separated list of base URLs to crawl. At least one of baseUrls or crawlUrls must be provided.')
+param baseUrls string = ''
+
+@description('Comma-separated list of specific URLs to crawl without following links. At least one of baseUrls or crawlUrls must be provided.')
+param crawlUrls string = ''
+
+@description('Comma-separated list of domains to include in the crawl.')
+param includeDomains string = ''
+
+@description('Regex patterns for domains to include, separated by pipe characters (|).')
+param includeDomainsRegex string = ''
+
+@description('Comma-separated list of URLs to include in the crawl.')
+param includeUrls string = ''
+
+@description('Regex patterns for URLs to include, separated by pipe characters (|).')
+param includeUrlsRegex string = ''
+
+@description('Comma-separated list of URLs to exclude from the crawl.')
+param excludeList string = 'www.google.com'
+
+@description('Comma-separated list of file types to extract links for (e.g., pdf).')
+param extractLinkType string = 'pdf'
+
+@description('Maximum crawl depth for following links from base URLs.')
+param crawlDepth int = 2
+
+@description('Number of threads to use for crawling.')
+param numOfThreads int = 2
+
+@description('Delay in seconds between crawling URLs.')
+param crawlDelay int = 0
+
+@description('Batch size for the indexer when uploading documents.')
+param indexerBatchSize int = 100
+
+@description('Whether to enable vector embeddings for search.')
+param enableVectors bool = true
+
+@description('Whether to ignore anchor links when crawling.')
+param ignoreAnchorLink bool = true
+
+@description('User agent string for the crawler.')
+param agentName string = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0'
+
+// Key Vault Parameters
+@description('Flag to use an existing Key Vault.')
+param useExistingKeyVault bool = false
+
+@description('Resource group of existing Key Vault. Required if useExistingKeyVault is true.')
+param existingKeyVaultResourceGroup string = ''
+
+@description('Name of Key Vault. Required if useExistingKeyVault is true, optional if creating a new service.')
+param keyVaultName string = ''
+
 // Container Registry Parameters
 @description('Flag to use an existing Azure Container Registry.  If false one will be created.')
 param useExistingACR bool = false
@@ -74,12 +134,6 @@ param docIntelligenceName string = ''
 @allowed(['S0', 'S1', 'S2', 'S3'])
 param docIntelligenceSku string = 'S0'
 
-// @description('Endpoint of existing Document Intelligence service. Required if useExistingDocIntelligence is true.')
-// param existingDocIntelligenceEndpoint string = ''
-
-// @description('Key of existing Document Intelligence service. Required if useExistingDocIntelligence is true.')
-// param existingDocIntelligenceKey string = ''
-
 // Azure OpenAI Parameters
 @description('Flag to use exsiting Azure OpenAI service or create a new one.')
 param useExistingOpenAI bool = false
@@ -94,21 +148,14 @@ param openAIName string = ''
 @allowed(['S0'])
 param openAISku string = 'S0'
 
-// @description('Endpoint of existing Azure OpenAI service. Required if useExistingOpenAI is true.')
-// param existingOpenAIEndpoint string = ''
-
-// @description('Key of existing Azure OpenAI service. Required if useExistingOpenAI is true.')
-// param existingOpenAIKey string = ''
-
-
 @description('Deployment name for the text embeddings model.  Defaults to the name of the model.')
 param openAIEmbeddingDeploymentName string = openAIEmbeddingModelName
 
 @description('Model to use for text embeddings.')
-param openAIEmbeddingModelName string = 'text-embedding-3-large'
+param openAIEmbeddingModelName string = 'text-embedding-ada-002'
 
 @description('Deployment model version for the text embeddings model.')
-param openAIEmbeddingModelVersion string = '1'
+param openAIEmbeddingModelVersion string = '2'
 
 param openAIEmbeddingTPM int = 60
 
@@ -126,12 +173,6 @@ param aiSearchName string = ''
 @allowed(['basic', 'standard', 'standard2', 'standard3'])
 param searchSku string = 'basic'
 
-// @description('Endpoint of existing Azure AI Search service. Required if useExistingAISearch is true.')
-// param existingSearchEndpoint string = ''
-
-// @description('Key of existing Azure AI Search service. Required if useExistingAISearch is true.')
-// param existingSearchKey string = ''
-
 @description('The name of the search index to create.')
 param searchIndexName string = 'crawler-index'
 
@@ -146,18 +187,6 @@ param existingCosmosDBAccountResourceGroup string = ''
 
 @description('Name of Cosmos DB Account. Required if useExistingCosmosDBAccount is true, optional if creating a new service.')
 param cosmosDBAccountName string = ''
-
-// @description('Endpoint URL of existing Cosmos DB account. Required if createNewCosmosDB is false.')
-// param existingCosmosDBUrl string = ''
-
-// @description('Key of existing Cosmos DB account. Required if createNewCosmosDB is false.')
-// param existingCosmosDBKey string = ''
-
-@description('Database name for Cosmos DB.')
-param cosmosDBDatabaseName string = 'CrawlStore'
-
-@description('Container name for Cosmos DB to store crawler logs.')
-param cosmosDBContainerName string = 'URLChangeLog'
 
 // Placeholder for the other container needed
 
@@ -190,16 +219,19 @@ var appServicePlanResourceName = useExistingAppServicePlan
   : !empty(appServicePlanName) 
     ? appServicePlanName 
     : '${abbrs.webServerFarms}${environmentName}-${resourceToken}'
-    
-// If useExistingACR is true, use acrName parameter
-// If useExistingACR is false, use acrName if provided, otherwise use default name pattern
+
+var keyVaultResourceName = useExistingKeyVault 
+  ? keyVaultName 
+  : !empty(keyVaultName) 
+    ? keyVaultName 
+    : '${abbrs.keyVaultVaults}${environmentName}-${resourceToken}'
+
 var containerRegistryResourceName = useExistingACR 
   ? acrName 
   : !empty(acrName) 
     ? acrName 
     : '${abbrs.containerRegistryRegistries}${environmentName}${resourceToken}'
 
-// AI Services names
 var docIntelligenceResourceName = useExistingDocIntelligence 
   ? docIntelligenceName 
   : !empty(docIntelligenceName) 
@@ -230,6 +262,15 @@ var storageAccountResourceName = useExistingStorageAccount
     ? storageAccountName
     : '${abbrs.storageStorageAccounts}${replace(environmentName, '-', '')}${resourceToken}'
 
+var secretNameAcrUsername = 'CONTAINER-REGISTRY-USERNAME'
+var secretNameAcrPassword = 'CONTAINER-REGISTRY-PASSWORD'
+var secretNameStorageConnectionString = 'STORAGE-CONNECTION-STRING'
+var secretNameDocumentIntelligenceKey = 'DOCUMENT-INTELLIGENCE-KEY'
+var secretNameAzureOpenAIKey = 'AZURE-OPENAI-KEY'
+var secretNameCosmosDBConnectionString = 'COSMOS-CONNECTION-STRING'
+var secretNameCosmosDBKey = 'COSMOS-KEY'
+var secretNameSearchKey = 'SEARCH-KEY'
+
 // Organize resources in a resource group
 resource rg 'Microsoft.Resources/resourceGroups@2021-04-01' = {
   name: resourceGroupResourceName
@@ -237,11 +278,54 @@ resource rg 'Microsoft.Resources/resourceGroups@2021-04-01' = {
   tags: tags
 }
 
+// Key Vault
+// Use existing:
+resource existingKeyVault 'Microsoft.KeyVault/vaults@2024-11-01' existing = if (useExistingKeyVault) {
+  name: keyVaultResourceName
+  scope: resourceGroup(existingKeyVaultResourceGroup)
+}
+
+// Or, define new:
+module keyVault './core/security/keyvault.bicep' = if (!useExistingKeyVault) {
+  name: 'key-vault'
+  scope: rg
+  params: {
+    name: keyVaultResourceName
+    location: location
+    tags: tags
+    //readAccessPrincipalIds: [functionApp.outputs.identityPrincipalId]
+  }
+}
+
+var keyVaultReferencePrefix = 'SecretUri=${useExistingKeyVault ? existingKeyVault.properties.vaultUri : keyVault.outputs.endpoint}secrets/'
+
 // Azure Container Registry
 // Use existing:
 resource existingAcr 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = if (useExistingACR) {
   name: containerRegistryResourceName
   scope: resourceGroup(existingACRResourceGroup)
+}
+
+module existingAcrCredentials './core/security/keyvault-secret.bicep' = if (useExistingACR) {
+  name: 'existing-acr-username'
+  scope: useExistingKeyVault ? resourceGroup(existingKeyVaultResourceGroup) : rg
+  params: {
+    keyVaultName: useExistingKeyVault ? existingKeyVault.name : keyVault.outputs.name
+    name: secretNameAcrUsername
+    contentType: 'text/plain'
+    secretValue: existingAcr.listCredentials().username
+  }
+}
+
+module existingAcrPassword './core/security/keyvault-secret.bicep' = if (useExistingACR) {
+  name: 'existing-acr-password'
+  scope: useExistingKeyVault ? resourceGroup(existingKeyVaultResourceGroup) : rg
+  params: {
+    keyVaultName: useExistingKeyVault ? existingKeyVault.name : keyVault.outputs.name
+    name: secretNameAcrPassword
+    contentType: 'text/plain'
+    secretValue: existingAcr.listCredentials().passwords[0].value
+  }
 }
 
 // Or, define new:
@@ -253,6 +337,10 @@ module acr './core/host/container-registry.bicep' = if (!useExistingACR) {
     location: location
     tags: tags
     adminUserEnabled: acrAdminUserEnabled
+    keyVaultName: useExistingKeyVault ? existingKeyVault.name : keyVault.outputs.name
+    keyVaultResourceGroup: useExistingKeyVault ? existingKeyVaultResourceGroup : rg.name
+    usernameSecretName: secretNameAcrUsername
+    passwordSecretName: secretNameAcrPassword
   }
 }
 
@@ -286,6 +374,17 @@ resource existingStorageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' e
   scope: resourceGroup(existingStorageAccountResourceGroup)
 }
 
+module existingstorageConnectionStringSecret './core/security/keyvault-secret.bicep' = if (useExistingStorageAccount) {
+  name: 'existing-storage-connection-string'
+  scope: useExistingKeyVault ? resourceGroup(existingKeyVaultResourceGroup) : rg
+  params: {
+    keyVaultName: useExistingKeyVault ? existingKeyVault.name : keyVault.outputs.name
+    name: secretNameStorageConnectionString
+    contentType: 'text/plain'
+    secretValue: 'DefaultEndpointsProtocol=https;AccountName=${existingStorageAccount.name};AccountKey=${existingStorageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
+  }
+}
+
 // Or, define new:
 module storageAccount './core/storage/storage-account.bicep' = if (!useExistingStorageAccount) {
   name: 'storage-account'
@@ -299,6 +398,9 @@ module storageAccount './core/storage/storage-account.bicep' = if (!useExistingS
     }
     kind: 'StorageV2'
     allowSharedKeyAccess: true
+    keyVaultName: useExistingKeyVault ? existingKeyVault.name : keyVault.outputs.name
+    keyVaultResourceGroup: useExistingKeyVault ? existingKeyVaultResourceGroup : rg.name
+    connectionStringSecretName: secretNameStorageConnectionString
   }
 }
 
@@ -306,6 +408,17 @@ module storageAccount './core/storage/storage-account.bicep' = if (!useExistingS
 resource existingDocIntelligence 'Microsoft.CognitiveServices/accounts@2023-05-01' existing = if (useExistingDocIntelligence) {
   name: docIntelligenceResourceName
   scope: resourceGroup(existingDocIntelligenceResourceGroup)
+}
+
+module existingDocIntelligenceKeySecret './core/security/keyvault-secret.bicep' = if (useExistingDocIntelligence) {
+  name: 'existing-doc-intelligence-key'
+  scope: useExistingKeyVault ? resourceGroup(existingKeyVaultResourceGroup) : rg
+  params: {
+    keyVaultName: useExistingKeyVault ? existingKeyVault.name : keyVault.outputs.name
+    name: secretNameDocumentIntelligenceKey
+    contentType: 'text/plain'
+    secretValue: existingDocIntelligence.listKeys().key1
+  }
 }
 
 module documentIntelligence './core/ai/document-intelligence.bicep' = if (!useExistingDocIntelligence) {
@@ -316,6 +429,9 @@ module documentIntelligence './core/ai/document-intelligence.bicep' = if (!useEx
     location: location
     tags: tags
     sku: docIntelligenceSku
+    keyVaultName: useExistingKeyVault ? existingKeyVault.name : keyVault.outputs.name
+    keyVaultResourceGroup: useExistingKeyVault ? existingKeyVaultResourceGroup : rg.name
+    keySecretName: secretNameDocumentIntelligenceKey
   }
 }
 
@@ -323,6 +439,17 @@ module documentIntelligence './core/ai/document-intelligence.bicep' = if (!useEx
 resource existingOpenAI 'Microsoft.CognitiveServices/accounts@2023-05-01' existing = if (useExistingOpenAI) {
   name: openAIResourceName
   scope: resourceGroup(existingOpenAIResourceGroup)
+}
+
+module existingOpenAIKeySecret './core/security/keyvault-secret.bicep' = if (useExistingOpenAI) {
+  name: 'existing-openai-key'
+  scope: useExistingKeyVault ? resourceGroup(existingKeyVaultResourceGroup) : rg
+  params: {
+    keyVaultName: useExistingKeyVault ? existingKeyVault.name : keyVault.outputs.name
+    name: secretNameAzureOpenAIKey
+    contentType: 'text/plain'
+    secretValue: existingOpenAI.listKeys().key1
+  }
 }
 
 module openAI './core/ai/openai.bicep' = if (!useExistingOpenAI) {
@@ -344,6 +471,9 @@ module openAI './core/ai/openai.bicep' = if (!useExistingOpenAI) {
         capacity: openAIEmbeddingTPM
       }
     ]
+    keyVaultName: keyVaultResourceName
+    keyVaultResourceGroup: useExistingKeyVault ? existingKeyVaultResourceGroup : rg.name
+    keySecretName: secretNameAzureOpenAIKey
   }
 }
 
@@ -352,6 +482,18 @@ resource existingSearch 'Microsoft.Search/searchServices@2023-11-01' existing = 
   name: searchServiceResourceName
   scope: resourceGroup(existingAISearchResourceGroup)
 }
+
+module existingSearchKeySecret './core/security/keyvault-secret.bicep' = if (useExistingAISearch) {
+  name: 'existing-search-key'
+  scope: useExistingKeyVault ? resourceGroup(existingKeyVaultResourceGroup) : rg
+  params: {
+    keyVaultName: useExistingKeyVault ? existingKeyVault.name : keyVault.outputs.name
+    name: secretNameSearchKey
+    contentType: 'text/plain'
+    secretValue: existingSearch.listAdminKeys().primaryKey
+  }
+}
+
 module search './core/ai/search.bicep' = if (!useExistingAISearch) {
   name: 'ai-search'
   scope: rg
@@ -361,6 +503,9 @@ module search './core/ai/search.bicep' = if (!useExistingAISearch) {
     tags: tags
     sku: searchSku
     semanticSearch: 'standard'
+    keyVaultName: useExistingKeyVault ? existingKeyVault.name : keyVault.outputs.name
+    keyVaultResourceGroup: useExistingKeyVault ? existingKeyVaultResourceGroup : rg.name
+    searchKeySecretName: secretNameSearchKey
   }
 }
 
@@ -369,6 +514,29 @@ resource existingCosmosDB 'Microsoft.DocumentDB/databaseAccounts@2023-11-15' exi
   name: cosmosDBAccountResourceName
   scope: resourceGroup(existingCosmosDBAccountResourceGroup)
 }
+
+module existingCosmosDBConnectionStringSecret './core/security/keyvault-secret.bicep' = if (useExistingCosmosDBAccount) {
+  name: 'existing-cosmos-connection-string'
+  scope: useExistingKeyVault ? resourceGroup(existingKeyVaultResourceGroup) : rg
+  params: {
+    keyVaultName: useExistingKeyVault ? existingKeyVault.name : keyVault.outputs.name
+    name: secretNameCosmosDBConnectionString
+    contentType: 'text/plain'
+    secretValue: existingCosmosDB.listConnectionStrings().connectionStrings[0].connectionString
+  }
+}
+
+module existingCosmosDBKeySecret './core/security/keyvault-secret.bicep' = if (useExistingCosmosDBAccount) {
+  name: 'existing-cosmos-key'
+  scope: useExistingKeyVault ? resourceGroup(existingKeyVaultResourceGroup) : rg
+  params: {
+    keyVaultName: useExistingKeyVault ? existingKeyVault.name : keyVault.outputs.name
+    name: secretNameCosmosDBKey
+    contentType: 'text/plain'
+    secretValue: existingCosmosDB.listKeys().primaryMasterKey
+  }
+}
+
 module cosmosDB 'core/database/cosmos/cosmos-account.bicep' = if (!useExistingCosmosDBAccount) {
   name: 'cosmos-db'
   scope: rg
@@ -377,6 +545,10 @@ module cosmosDB 'core/database/cosmos/cosmos-account.bicep' = if (!useExistingCo
     kind: 'GlobalDocumentDB'
     location: location
     tags: tags
+    keyVaultName: keyVaultResourceName
+    keyVaultResourceGroup: useExistingKeyVault ? existingKeyVaultResourceGroup : rg.name
+    keySecretName: secretNameCosmosDBKey
+    connectionStringSecretName: secretNameCosmosDBConnectionString
   }
 }
 
@@ -397,65 +569,107 @@ module functionApp './core/host/functions.bicep' = {
     storageAccountName: useExistingStorageAccount ? existingStorageAccount.name : storageAccount.outputs.name
     linuxFxVersion: 'DOCKER|${useExistingACR ? existingAcr.properties.loginServer : acr.outputs.loginServer}/crawler/crawler:latest'
     appSettings: {
-      // Basic configuration settings
-      BASE_URLS: ''  // Will need to be configured post-deployment
-      INCLUDE_PATHS: ''  // Will need to be configured post-deployment
-      EXCLUDE_LIST: 'www.google.com'  // Default value from .env
-      ENABLE_VECTORS: 'true'
-      EXTRACT_LINK_TYPE: 'pdf'
-      NUM_OF_THREADS: '2'
-      INDEX_NAME: searchIndexName
-      // COSMOS_DATABASE_NAME: cosmosDBDatabaseName
-      // COSMOS_CONTAINER_NAME: cosmosDBContainerName // this might not be used by the code yet
-      
-      // Docker registry settings
-      DOCKER_REGISTRY_SERVER_URL: 'https://${useExistingACR ? existingAcr.properties.loginServer : acr.outputs.loginServer}'
-      DOCKER_REGISTRY_SERVER_USERNAME: useExistingACR ? existingAcr.listCredentials().username : listCredentials(resourceId(subscription().subscriptionId, rg.name, 'Microsoft.ContainerRegistry/registries', containerRegistryResourceName), '2023-07-01').username
-      DOCKER_REGISTRY_SERVER_PASSWORD: useExistingACR ? existingAcr.listCredentials().passwords[0].value : listCredentials(resourceId(subscription().subscriptionId, rg.name, 'Microsoft.ContainerRegistry/registries', containerRegistryResourceName), '2023-07-01').passwords[0].value
-      
-      // Storage settings
-      WEBSITES_ENABLE_APP_SERVICE_STORAGE: 'false'
-      // WEBSITE_CONTENTAZUREFILECONNECTIONSTRING: useExistingStorageAccount 
-      //   ? 'DefaultEndpointsProtocol=https;AccountName=${storageAccountResourceName};AccountKey=${existingStorageAccount.listKeys().keys[0].value}' 
-      //   : 'DefaultEndpointsProtocol=https;AccountName=${storageAccountResourceName};AccountKey=${listKeys(resourceId(subscription().subscriptionId, rg.name, 'Microsoft.Storage/storageAccounts', storageAccountResourceName), '2023-01-01').keys[0].value}'
-      // WEBSITE_CONTENTSHARE: toLower(functionAppResourceName)
-      AzureWebJobsStorage: useExistingStorageAccount 
-        ? 'DefaultEndpointsProtocol=https;AccountName=${existingStorageAccount.name};AccountKey=${existingStorageAccount.listKeys().keys[0].value}' 
-        : 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.outputs.name};AccountKey=${listKeys(resourceId(subscription().subscriptionId, rg.name, 'Microsoft.Storage/storageAccounts', storageAccountResourceName), '2023-01-01').keys[0].value}'
+      // Crawler configuration settings
+      BASE_URLS: baseUrls
+      CRAWL_URLS: crawlUrls
+      INCLUDE_DOMAINS: includeDomains
+      INCLUDE_DOMAINS_REGEX: includeDomainsRegex
+      INCLUDE_URLS: includeUrls
+      INCLUDE_URLS_REGEX: includeUrlsRegex
+      EXCLUDE_LIST: excludeList
+      EXTRACT_LINK_TYPE: extractLinkType
+      DEPTH: string(crawlDepth)
+      NUM_OF_THREADS: string(numOfThreads)
+      DELAY: string(crawlDelay)
+      INDEXER_BATCH_SIZE: string(indexerBatchSize)
+      ENABLE_VECTORS: enableVectors ? 'true' : 'false'
+      IGNORE_ANCHOR_LINK: ignoreAnchorLink ? 'true' : 'false'
+      AGENT_NAME: agentName
       
       // Search settings
+      INDEX_NAME: searchIndexName
       SEARCH_ENDPOINT: useExistingAISearch ? 'https://${aiSearchName}.search.windows.net' : search.outputs.endpoint
-      SEARCH_KEY: useExistingAISearch 
-        ? existingSearch.listAdminKeys().primaryKey 
-        : listAdminKeys(resourceId(subscription().subscriptionId, rg.name, 'Microsoft.Search/searchServices', searchServiceResourceName), '2023-11-01').primaryKey
+      SEARCH_KEY: '@Microsoft.KeyVault(${keyVaultReferencePrefix}${secretNameSearchKey})'
       
       // Document Intelligence settings
       FORM_RECOGNIZER_ENDPOINT: useExistingDocIntelligence ? existingDocIntelligence.properties.endpoint : documentIntelligence.outputs.endpoint
-      FORM_RECOGNIZER_KEY: useExistingDocIntelligence 
-        ? existingDocIntelligence.listKeys().key1 
-        : listKeys(resourceId(subscription().subscriptionId, rg.name, 'Microsoft.CognitiveServices/accounts', docIntelligenceResourceName), '2023-05-01').key1
+      FORM_RECOGNIZER_KEY: '@Microsoft.KeyVault(${keyVaultReferencePrefix}${secretNameDocumentIntelligenceKey})'
       
       // OpenAI settings
       EMBEDDING_MODEL_ENDPOINT: useExistingOpenAI 
         ? '${existingOpenAI.properties.endpoint}openai/deployments/${openAIEmbeddingDeploymentName}/embeddings' 
         : '${openAI.outputs.endpoint}openai/deployments/${openAIEmbeddingDeploymentName}/embeddings'
-      EMBEDDING_MODEL_KEY: useExistingOpenAI 
-        ? existingOpenAI.listKeys().key1 
-        : listKeys(resourceId(subscription().subscriptionId, rg.name, 'Microsoft.CognitiveServices/accounts', openAIResourceName), '2023-05-01').key1
+      EMBEDDING_MODEL_KEY: '@Microsoft.KeyVault(${keyVaultReferencePrefix}${secretNameAzureOpenAIKey})'
       
       // Cosmos DB settings
       COSMOS_URL: useExistingCosmosDBAccount ? existingCosmosDB.properties.documentEndpoint : cosmosDB.outputs.endpoint
-      COSMOS_DB_KEY: useExistingCosmosDBAccount 
-        ? existingCosmosDB.listKeys().primaryMasterKey 
-        : listKeys(resourceId(subscription().subscriptionId, rg.name, 'Microsoft.DocumentDB/databaseAccounts', cosmosDBAccountResourceName), '2023-11-15').primaryMasterKey
-        
-      // Application Insights settings
-      //APPLICATIONINSIGHTS_CONNECTION_STRING: ''  // Will need to be configured post-deployment
+      COSMOS_DB_KEY: '@Microsoft.KeyVault(${keyVaultReferencePrefix}${secretNameCosmosDBKey})'
+      COSMOS_DATABASE_NAME: 'CrawlStore'
+      COSMOS_CONTAINER_NAME: 'URLChangeLog'
       
-      // Azure AD / Service Principal settings (if using service principal authentication)
-      // AZURE_TENANT_ID: ''  // Will need to be configured post-deployment
-      // AZURE_CLIENT_ID: ''  // Will need to be configured post-deployment
-      // AZURE_CLIENT_SECRET: ''  // Will need to be configured post-deployment
+      // Docker registry settings
+      DOCKER_REGISTRY_SERVER_URL: 'https://${useExistingACR ? existingAcr.properties.loginServer : acr.outputs.loginServer}'
+      DOCKER_REGISTRY_SERVER_USERNAME: '@Microsoft.KeyVault(${keyVaultReferencePrefix}${secretNameAcrUsername})'
+      DOCKER_REGISTRY_SERVER_PASSWORD: '@Microsoft.KeyVault(${keyVaultReferencePrefix}${secretNameAcrPassword})'
+      
+      // Storage settings
+      WEBSITES_ENABLE_APP_SERVICE_STORAGE: 'false'
+      AzureWebJobsStorage: '@Microsoft.KeyVault(${keyVaultReferencePrefix}${secretNameStorageConnectionString})'
+      
+      // Logging settings
+      Use_COSMOS_Logger: 'true'
+      
+      // Schedule for the timer trigger
+      SCHEDULE: '0 0 * * *'
+    }
+    // Enable managed identity for the function app to access Key Vault
+    managedIdentity: true
+  }
+}
+
+
+// Add Key Vault access policy for the deployment user
+module deploymentUserKeyVaultAccess './core/security/keyvault-access.bicep' = if (!empty(deploymentPrincipalId)) {
+  name: 'deployment-user-keyvault-access'
+  scope: rg
+  params: {
+    keyVaultName: useExistingKeyVault ? existingKeyVault.name : keyVault.outputs.name
+    principalId: deploymentPrincipalId
+    permissions: {
+      secrets: [
+        'get'
+        'list'
+        'set'
+        'delete'
+      ]
+      certificates: [
+        'get'
+        'list'
+        'create'
+        'update'
+      ]
+      keys: [
+        'get'
+        'list'
+        'create'
+        'update'
+      ]
+    }
+  }
+}
+
+// Add Key Vault access policy for the function app
+module functionAppKeyVaultAccess './core/security/keyvault-access.bicep' = {
+  name: 'function-app-keyvault-access'
+  scope: rg
+  params: {
+    keyVaultName: useExistingKeyVault ? existingKeyVault.name : keyVault.outputs.name
+    principalId: functionApp.outputs.identityPrincipalId
+    permissions: {
+      secrets: [
+        'get'
+        'list'
+      ]
     }
   }
 }
@@ -486,4 +700,7 @@ output EMBEDDING_MODEL_ENDPOINT string = useExistingOpenAI ? '${existingOpenAI.p
 
 // Cosmos DB outputs
 output COSMOS_DB_URL string = useExistingCosmosDBAccount ? existingCosmosDB.properties.documentEndpoint : cosmosDB.outputs.endpoint
+
+// Key Vault outputs
+output KEY_VAULT_NAME string = keyVaultResourceName
 

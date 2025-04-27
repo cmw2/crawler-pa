@@ -8,6 +8,51 @@
       "location": {
         "value": "${AZURE_LOCATION}"
       },
+      "baseUrls": {
+        "value": "${BASE_URLS}"
+      },
+      "crawlUrls": {
+        "value": "${CRAWL_URLS}"
+      },
+      "includeDomains": {
+        "value": "${INCLUDE_DOMAINS=}"
+      },
+      "includeDomainsRegex": {
+        "value": "${INCLUDE_DOMAINS_REGEX=}"
+      },
+      "includeUrls": {
+        "value": "${INCLUDE_URLS=}"
+      },
+      "includeUrlsRegex": {
+        "value": "${INCLUDE_URLS_REGEX=}"
+      },
+      "excludeList": {
+        "value": "${EXCLUDE_LIST=www.google.com}"
+      },
+      "extractLinkType": {
+        "value": "${EXTRACT_LINK_TYPE=pdf}"
+      },
+      "crawlDepth": {
+        "value": "${DEPTH=2}"
+      },
+      "numOfThreads": {
+        "value": "${NUM_OF_THREADS=2}"
+      },
+      "crawlDelay": {
+        "value": "${DELAY=0}"
+      },
+      "indexerBatchSize": {
+        "value": "${INDEXER_BATCH_SIZE=100}"
+      },
+      "enableVectors": {
+        "value": "${ENABLE_VECTORS=true}"
+      },
+      "ignoreAnchorLink": {
+        "value": "${IGNORE_ANCHOR_LINK=true}"
+      },
+      "agentName": {
+        "value": "${AGENT_NAME=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0}"
+      },
       "resourceGroupName": {
         "value": ""
       },
@@ -75,10 +120,10 @@
         "value": "text-embedding-ada-002"
       },
       "openAIEmbeddingModelName": {
-        "value": "text-embedding-3-large"
+        "value": "text-embedding-ada-002"
       },
       "openAIEmbeddingModelVersion": {
-        "value": "1"
+        "value": "2"
       },
       "openAIEmbeddingTPM": {
         "value": 60
@@ -112,6 +157,9 @@
       },
       "cosmosDBContainerName": {
         "value": "URLChangeLog"
+      },
+      "deploymentPrincipalId": {
+        "value": "${AZURE_DEPLOYER_PRINCIPAL_ID}"
       }
     }
 }
