@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+# Name of the application
+name: crawler-pa
+services:
+  crawler-func:
+    language: python
+    project: ./
+    host: function
+
+# Hooks to customize the deployment process
+hooks:
+  preprovision:
+    windows:
+      shell: pwsh
+      run: ./hooks/preprovision.ps1
+      interactive: true
+      continueOnError: false
+    posix:
+      shell: sh
+      run: chmod +x ./hooks/preprovision.sh && ./hooks/preprovision.sh
+      interactive: true
+      continueOnError: false
+  # Run the script to build and push Docker image right before the app deployment
+  predeploy:
+    windows:
+      shell: pwsh
+      run: ./build-push-image.ps1
+      interactive: true
+      continueOnError: false
+    posix:
+      shell: sh
+      run: chmod +x ./build-push-image.sh && ./build-push-image.sh
+      continueOnError: false
+      interactive: true

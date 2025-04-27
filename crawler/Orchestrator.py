@@ -13,6 +13,8 @@ import uuid, base64, os, time, requests, json
 import queue, threading
 import hashlib
 from urllib.parse import urlparse
+from azure.identity import DefaultAzureCredential
+import re
 
 class Orchestrator:
     _shared_state = {}
@@ -20,13 +22,29 @@ class Orchestrator:
     def __init__(self, logger):
         self.__dict__ = self._shared_state
 
+        regex_patterns = []
+
         if not self._shared_state:
             self.logging = logger
+            self.DELAY = int(os.getenv("DELAY", 0))
+            self.INDEXER_BATCH_SIZE = int(os.getenv("INDEXER_BATCH_SIZE", 100))
+            self.CRAWL_DEPTH = int(os.getenv("DEPTH", 2))
             self.NUM_OF_THREADS = int(os.getenv("NUM_OF_THREADS", 1))
             self.EXCLUDE_LIST = os.getenv('EXCLUDE_LIST', "").split(',')
             self.EXCLUDE = False if self.EXCLUDE_LIST == [''] else True
+            
             include_domains = os.getenv('INCLUDE_DOMAINS', "").split(',')
             self.INCLUDE_DOMAINS = False if include_domains == [''] else [include_domain.lower() for include_domain in include_domains]
+            in_domain_regex_patterns = os.getenv('INCLUDE_DOMAINS_REGEX', '').split('|')
+            in_domain_compiled_patterns = [re.compile(pattern) for pattern in in_domain_regex_patterns]
+            self.INCLUDE_DOMAINS_REGEX = False if in_domain_regex_patterns == [''] else in_domain_compiled_patterns
+            
+            include_urls = os.getenv('INCLUDE_URLS', "").split(',')
+            self.INCLUDE_URLS = False if include_urls == [''] else [include_urls.lower() for include_urls in include_urls]
+            in_url_regex_patterns = os.getenv('INCLUDE_URLS_REGEX', '').split('|')
+            in_url_compiled_patterns = [re.compile(pattern) for pattern in in_url_regex_patterns]
+            self.INCLUDE_URLS_REGEX = False if in_url_regex_patterns == [''] else in_url_compiled_patterns
+            
             self.BASE_URLS = os.getenv('BASE_URLS', "").split(',')
             extract_link_type = os.getenv('EXTRACT_LINK_TYPE', "").split(',')
             self.EXTRACT_LINK_TYPE = False if extract_link_type == [''] else [file_type.lower() for file_type in extract_link_type]
@@ -35,13 +53,16 @@ class Orchestrator:
             enable_vectors_str = os.getenv("ENABLE_VECTORS", "false")
             self.ENABLE_VECTORS = enable_vectors_str.lower() in ['true', '1', 'yes']
 
+            ignore_anchor_link = os.getenv("IGNORE_ANCHOR_LINK", "false")
+            self.IGNORE_ANCHOR_LINK = ignore_anchor_link.lower() in ['true', '1', 'yes']
+
             self.INDEX_NAME = os.getenv("INDEX_NAME", "crawler-index")
             self.SEARCH_ENDPOINT = os.getenv("SEARCH_ENDPOINT")
             self.SEARCH_CREDS = AzureKeyCredential(os.getenv("SEARCH_KEY"))
             self.FORM_RECOGNIZER_ENDPOINT = os.getenv("FORM_RECOGNIZER_ENDPOINT") 
             self.FORM_RECOGNIZER_CREDS = AzureKeyCredential(os.getenv("FORM_RECOGNIZER_KEY"))
             self.COSMOS_URL = os.environ.get("COSMOS_URL")
-            self.COSMOS_KEY = os.environ.get("COSMOS_DB_KEY")
+            self.COSMOS_KEY = os.environ.get("COSMOS_DB_KEY", None)
             self.DATABASE_NAME = os.environ.get("COSMOS_DATABASE_NAME", "CrawlStore")
             self.CONTAINER_NAME = os.environ.get("COSMOS_CONTAINER_NAME", "URLChangeLog")
             self.AGENT_NAME = os.environ.get("AGENT_NAME", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0")
@@ -53,6 +74,9 @@ class Orchestrator:
         self.logging.info(f"EXCLUDE_LIST: {self.EXCLUDE_LIST}")
         self.logging.info(f"EXCLUDE: {self.EXCLUDE}")
         self.logging.info(f"INCLUDE_DOMAINS: {self.INCLUDE_DOMAINS}")
+        self.logging.info(f"INCLUDE_DOMAINS_REGEX: {in_domain_regex_patterns}")
+        self.logging.info(f"INCLUDE_URLS: {self.INCLUDE_URLS}")
+        self.logging.info(f"INCLUDE_URLS_REGEX: {in_url_regex_patterns}")
         self.logging.info(f"BASE_URLS: {self.BASE_URLS}")
         self.logging.info(f"EXTRACT_LINK_TYPE: {self.EXTRACT_LINK_TYPE}")
         self.logging.info(f"CRAWL_URLS: {self.CRAWL_URLS}")
@@ -82,7 +106,12 @@ class Orchestrator:
 
         # Azure CosmosDB Client
         
-        cosmosdb_client = CosmosClient(self.COSMOS_URL, credential=self.COSMOS_KEY)
+        cosmos_cred = self.COSMOS_KEY
+
+        if not self.COSMOS_KEY:
+            cosmos_cred = DefaultAzureCredential()
+        
+        cosmosdb_client = CosmosClient(self.COSMOS_URL, credential=cosmos_cred)
         # Create the database if it does not exist
         self.logging.info(f"Creating Cosmos DB if it does not exist: {self.DATABASE_NAME}")
         database = cosmosdb_client.create_database_if_not_exists(id=self.DATABASE_NAME)
@@ -116,7 +145,7 @@ class Orchestrator:
 
 
 
-    def extract_links_to_queue(self, crawler, nextq):
+    def extract_links_to_queue(self, crawler, nextq, depth: int):
         self.logging.info(f"Extracting Links...")
 
         body = crawler.get_elements(By.TAG_NAME, "body")
@@ -124,14 +153,32 @@ class Orchestrator:
         try:
 
             if len(body) > 0:
-                links = crawler.get_links(body[0], exclude=self.EXCLUDE, file_types=self.EXTRACT_LINK_TYPE)
+                links, p_links = crawler.get_links(body[0], exclude=self.EXCLUDE, file_types=self.EXTRACT_LINK_TYPE, include=(self.INCLUDE_URLS or self.INCLUDE_URLS_REGEX))
         
+        
+            #for p_link in p_links:
+                #self.logging.info(f"Link found before applying rules : {p_link}")
+
             for link in links:
-                self.logging.info(f"Link found, adding to crawler queue: {link}")
-                item = {"url": link, "metadata": {}, "type": "crawl"}
-                nextq.put(item)
+                self.logging.info(f"Link found, adding to crawler queue: {link} : at {depth}")
+                item = {"url": link, "metadata": {}, "type": "base", "depth": depth + 1}
+
+                if not self.item_in_queue(nextq, item):
+                    nextq.put(item)
         except Exception as e:
             self.logging.error(f"Error in link extraction, Error: {e}")
+
+    def item_in_queue(self, itemQueue, item):
+        # Check if item with the same link already exists in the queue
+        exists = False
+        for q_item in list(itemQueue.queue):
+
+            if q_item.get('url').lower() == item.get('url').lower():
+                self.logging.info(f"Link already in crawler queue : {q_item.get('url')}")
+                exists = True
+                break
+        
+        return exists
 
 
     def url_crawler_consumer(self, q, nextq):
@@ -140,7 +187,7 @@ class Orchestrator:
             if item is None:
                 break
 
-            result = self.crawl_url(item["url"], q, item["type"])
+            result = self.crawl_url(item["url"], q, item["type"], depth=item["depth"])
             if result is not None:
                 content, contenttype = result
 
@@ -149,12 +196,17 @@ class Orchestrator:
                 nextq.put(item)
 
             q.task_done()
+
+            if self.DELAY:
+                self.logging.info(f"Pausing crawl for {self.DELAY} seconds.")
+                time.sleep(self.DELAY)
+
         self.logging.info(f"Url Crawler Consumer is done")
 
 
-    def crawl_url(self, url, q, url_type):
+    def crawl_url(self, url, q, url_type, depth):
         """Crawl a URL and return its content and type."""
-        self.logging.info(f"Crawling: {url} of type: {url_type}")
+        self.logging.info(f"Crawling: {url} of type: {url_type} and depth: {depth}")
 
         try:
             parsed_url = urlparse(url)
@@ -168,7 +220,7 @@ class Orchestrator:
                 
                 return response.content, "pdf"
             else:
-                with WebCrawler(base_url=url, exclude_urls=self.EXCLUDE_LIST, agent=self.AGENT_NAME, include_domains=self.INCLUDE_DOMAINS) as crawler:
+                with WebCrawler(base_url=url, exclude_urls=self.EXCLUDE_LIST, agent=self.AGENT_NAME, include_domains=self.INCLUDE_DOMAINS, include_urls=self.INCLUDE_URLS, include_urls_regex=self.INCLUDE_URLS_REGEX, ignore_anchor_link=self.IGNORE_ANCHOR_LINK, include_domains_regex=self.INCLUDE_DOMAINS_REGEX) as crawler:
                     crawler.visit_url(url)
                     
                     #self.logging.info(f"URL : {url}, HTML: {crawler.get_page_source()}")
@@ -178,8 +230,11 @@ class Orchestrator:
                     if not self.page_has_changed(url=url, md5_hash=md5_hash):
                         return None
 
-                    if url_type == "base":
-                        self.extract_links_to_queue(crawler=crawler, nextq=q)
+                    """ if url_type == "base":
+                        depth = 0 """
+
+                    if depth < self.CRAWL_DEPTH and url_type == "base":
+                        self.extract_links_to_queue(crawler=crawler, nextq=q, depth=depth)
 
                     content = crawler.parse_page()
                     return content, "text"
@@ -207,7 +262,8 @@ class Orchestrator:
                     add_embeddings=self.ENABLE_VECTORS,
                     form_recognizer_client=self.form_recognizer_client if item["contenttype"] == "pdf" else None,
                     use_layout=True if item["contenttype"] == "pdf" else False,
-                    metadata = item.get("metadata", None)
+                    metadata = item.get("metadata", None),
+                    logger=self.logging
                 )
 
                 i=0
@@ -218,7 +274,10 @@ class Orchestrator:
                     chunk.sourcepage = str(i)
                     chunk.sourcefile = str(item["url"])
 
-                    self.logging.info(f"Processed Chunk for url: {chunk.url} - Chunk Id: {chunk.id}")
+                    if chunk.embedding is not None:
+                        self.logging.info(f"Processed Chunk for url: {chunk.url} - Chunk id: {chunk.id} - Chunk embedding: {chunk.embedding[:5]}")
+                    else:
+                        self.logging.info(f"Processed Chunk for url: {chunk.url} - Chunk id: {chunk.id} - No embedding available")
 
                     nextq.put(chunk)
 
@@ -234,6 +293,8 @@ class Orchestrator:
 
 
     def indexer_consumer(self, q, search_client, batch_size=100):
+
+        batch_size = self.INDEXER_BATCH_SIZE
         
         self.logging.info(f"Indexing consumer running with batch size: {batch_size}")
 
@@ -246,6 +307,7 @@ class Orchestrator:
                     try:
                         # Upload the documents to the index
                         upload_documents_to_index(docs=batch, search_client=search_client, upload_batch_size=len(batch))
+                        self.logging.info(f"Search Indexer Consumer uploaded {len(batch)} documents to the index")
                     except Exception as e:
                         self.logging.error(f"Error uploading document to index: {e}")
                 break
@@ -257,6 +319,7 @@ class Orchestrator:
                 try:
                     # Upload the documents to the index
                     upload_documents_to_index(docs=batch, search_client=search_client, upload_batch_size=batch_size)
+                    self.logging.info(f"Search Indexer Consumer uploaded {len(batch)} documents to the index")
                 except Exception as e:
                     self.logging.error(f"Error uploading document to index: {e}")
                 finally:
@@ -334,6 +397,10 @@ class Orchestrator:
                     else:
                         self.container.replace_item(item=item['id'], body=item)
 
+                if self.DELAY:
+                    self.logging.info(f"Pausing link check for {self.DELAY} seconds.")
+                    time.sleep(self.DELAY)
+
             except Exception as e:
                 self.logging.error(f"Error occurred while checking {url}, Exception: {e}")
         return expired_links
@@ -394,6 +461,7 @@ class Orchestrator:
             item = dict()
             item["url"] = base_url
             item["type"] = "base"
+            item["depth"] = 0
 
             url_crawler_queue.put(item=item)
             #base_crawler_queue.put(base_url)
@@ -407,6 +475,7 @@ class Orchestrator:
             item = dict()
             item["url"] = url
             item["type"] = "crawl"
+            item["depth"] = 0
 
             url_crawler_queue.put(item=item)
 

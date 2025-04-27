@@ -1,0 +1,12 @@
+local.settings.json
+env/
+.venv/
+venv/
+.env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.git
+.gitignore
