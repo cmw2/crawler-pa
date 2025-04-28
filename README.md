@@ -124,21 +124,21 @@ For more control over the deployment process, you can follow the manual deployme
 
 #### Docker Image Creation and Push to Azure Container Registry
 
-Change into the directory container the Dockerfile
+Change into the directory containing the Dockerfile
 
-```ps
+```bash
 cd <path-to-directory-with-Dockerfile>
 ```
 
 Login to Azure Container Registry
 
-```ps
+```bash
 az acr login --name <azure-container-registry-name> -t
 ```
 
 Build the container image. You can change the --image name and tag as needed.
 
-```ps
+```bash
 az acr build --image crawler/f4t-crawler:v1 --registry <azure-container-registry-name> --file Dockerfile .
 ```
 
