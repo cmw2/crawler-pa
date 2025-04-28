@@ -30,7 +30,7 @@
         "value": "${EXCLUDE_LIST=www.google.com}"
       },
       "extractLinkType": {
-        "value": "${EXTRACT_LINK_TYPE=pdf}"
+        "value": "${EXTRACT_LINK_TYPE=html,pdf}"
       },
       "crawlDepth": {
         "value": "${DEPTH=2}"
