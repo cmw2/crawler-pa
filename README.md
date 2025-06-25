@@ -47,7 +47,7 @@ The quickest way to deploy the Web Crawler Function is using the Azure Developer
 
    ```bash
    azd env set BASE_URLS "http://www.example.com"
-   azd env set INCLUDE_DOMAINS "example.com"
+   azd env set INCLUDE_DOMAINS "www.example.com,example.com"
    azd env set EXTRACT_LINK_TYPE "html,pdf"  # Default: html,pdf
    azd env set DEPTH 99
    ```
@@ -191,7 +191,7 @@ To manually kick off a crawl:
 
    ![test-crawler](media/s2.PNG)
 
-
+**NOTE:** If you've just deployed the function app it can take several additional minutes for it to be available to run.
 
 ## Cleaning Up Azure Resources
 
